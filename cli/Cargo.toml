@@ -1,14 +1,18 @@
 [package]
-name = "agent-browser"
+name = "agent-browser-native-tls"
 version = "0.26.0"
 edition = "2021"
-description = "Fast browser automation CLI for AI agents"
+description = "Fork of agent-browser with rustls-tls-native-roots — works behind TLS-inspecting egress proxies (Anthropic Managed Agents, Cloudflare WARP, corporate MITM). Drop-in replacement; binary still named `agent-browser`."
 license = "Apache-2.0"
-repository = "https://github.com/vercel-labs/agent-browser"
-homepage = "https://agent-browser.dev"
+repository = "https://github.com/austinxu123/agent-browser-native-tls"
+homepage = "https://github.com/austinxu123/agent-browser-native-tls"
 readme = "../README.md"
 keywords = ["browser", "automation", "ai", "cdp", "chrome"]
 categories = ["command-line-utilities", "web-programming"]
+
+[[bin]]
+name = "agent-browser"
+path = "src/main.rs"
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
@@ -17,12 +21,12 @@ dirs = "5.0"
 base64 = "0.22"
 getrandom = "0.2"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "time", "sync", "signal", "process"] }
-tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
+tokio-tungstenite = { version = "0.24", features = ["rustls-tls-native-roots"] }
 futures-util = "0.3"
 url = "2"
 uuid = { version = "1", features = ["v4"] }
 image = "0.25"
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-webpki-roots", "stream"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-native-roots", "stream"] }
 sha2 = "0.10"
 aes-gcm = "0.10"
 async-trait = "0.1"
