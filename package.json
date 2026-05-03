@@ -1,7 +1,7 @@
 {
-  "name": "agent-browser",
-  "version": "0.26.0",
-  "description": "Browser automation CLI for AI agents",
+  "name": "agent-browser-native-tls",
+  "version": "0.26.1",
+  "description": "Fork of agent-browser with native TLS roots — works behind TLS-inspecting proxies",
   "type": "module",
   "files": [
     "bin",
