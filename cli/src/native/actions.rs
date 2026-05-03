@@ -2604,6 +2604,10 @@ async fn handle_screenshot(cmd: &Value, state: &mut DaemonState) -> Result<Value
         response["annotations"] = serde_json::to_value(&result.annotations)
             .map_err(|e| format!("Failed to serialize annotations: {}", e))?;
     }
+    if let Some(ref resize) = result.resize {
+        response["resize"] = serde_json::to_value(resize)
+            .map_err(|e| format!("Failed to serialize resize: {}", e))?;
+    }
 
     Ok(response)
 }
