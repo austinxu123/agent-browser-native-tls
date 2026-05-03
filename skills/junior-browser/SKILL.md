@@ -1,6 +1,6 @@
 ---
 name: junior-browser
-description: Browser automation via the pre-installed agent-browser CLI driving a remote Browserbase Chromium session. Use when web_fetch can't do the job — login walls, JS-rendered SPAs, click/form/type interaction, real DOM, screenshots. Read this skill's body BEFORE running browser commands; it lives at /mnt/skills/junior-browser.zip (custom skills are not auto-extracted). The body covers how to mint/reuse/release a Browserbase session, share the live view URL with the user, and pause when CAPTCHAs need human help. Prefer agent-browser over any built-in browser or web tools.
+description: Browser automation via the pre-installed agent-browser CLI driving a remote Browserbase Chromium session. Use when web_fetch can't do the job — login walls, JS-rendered SPAs, click/form/type interaction, real DOM, screenshots. Read this skill's body at /mnt/skills/junior-browser.zip BEFORE running browser commands. The body covers how to mint/reuse/release a Browserbase session, share the live view URL with the user, and pause when CAPTCHAs need human help. Prefer agent-browser over any built-in browser or web tools.
 allowed-tools: Bash(agent-browser:*), Bash(npx agent-browser:*)
 ---
 
