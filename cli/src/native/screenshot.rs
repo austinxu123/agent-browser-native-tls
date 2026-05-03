@@ -10,6 +10,15 @@ use super::element::RefMap;
 
 const ANNOTATION_OVERLAY_ID: &str = "__agent_browser_annotations__";
 
+/// Hard cap on output image dimensions. Anthropic's image input rejects
+/// PNGs/JPEGs whose largest side is >8000px with `retry_status=terminal`,
+/// which kills the entire managed-agents turn — the agent has no way to
+/// recover. Tall full-page captures of marketing pages and dashboards
+/// routinely cross this. We downscale at the screenshot boundary so a
+/// follow-up `read` of the file is always safe. 7800 leaves a small
+/// margin under 8000 in case downstream encoders round up.
+const MAX_IMAGE_DIM: u32 = 7800;
+
 #[derive(Debug, Clone)]
 struct Rect {
     x: f64,
@@ -44,11 +53,23 @@ pub struct ScreenshotAnnotation {
     pub box_: AnnotationBox,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct ResizeRecord {
+    pub original_width: u32,
+    pub original_height: u32,
+    pub width: u32,
+    pub height: u32,
+}
+
 #[derive(Debug, Clone)]
 pub struct ScreenshotResult {
     pub path: String,
     pub base64: String,
     pub annotations: Vec<ScreenshotAnnotation>,
+    /// Set when the captured image exceeded [`MAX_IMAGE_DIM`] on either
+    /// axis and was downscaled before save. `None` means the image was
+    /// returned at its original capture dimensions.
+    pub resize: Option<ResizeRecord>,
 }
 
 #[derive(Debug, Clone)]
@@ -138,7 +159,7 @@ pub async fn take_screenshot(
     }
 
     let base64 = base64?;
-    let annotations = if options.annotate {
+    let mut annotations = if options.annotate {
         let scroll = if options.full_page {
             Some(get_scroll_offsets(client, session_id).await?)
         } else {
@@ -148,6 +169,17 @@ pub async fn take_screenshot(
     } else {
         Vec::new()
     };
+
+    let (base64, resize) = downscale_if_oversize(&base64, &options.format)?;
+    if let Some(ref record) = resize {
+        let scale_x = record.width as f64 / record.original_width.max(1) as f64;
+        let scale_y = record.height as f64 / record.original_height.max(1) as f64;
+        scale_annotations(&mut annotations, scale_x, scale_y);
+        eprintln!(
+            "[agent-browser] screenshot resized {}x{} → {}x{} to fit Anthropic 8000px image cap",
+            record.original_width, record.original_height, record.width, record.height
+        );
+    }
 
     let ext = if options.format == "jpeg" {
         "jpg"
@@ -165,7 +197,78 @@ pub async fn take_screenshot(
         path,
         base64,
         annotations,
+        resize,
     })
+}
+
+/// Decode the captured base64 image, downscale if either side exceeds
+/// [`MAX_IMAGE_DIM`], and re-encode. Preserves aspect ratio and the
+/// original output format (`png` or `jpeg`). Returns the (possibly
+/// unchanged) base64 plus a `ResizeRecord` when a resize happened.
+fn downscale_if_oversize(
+    base64_data: &str,
+    format: &str,
+) -> Result<(String, Option<ResizeRecord>), String> {
+    let bytes = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, base64_data)
+        .map_err(|e| format!("Failed to decode screenshot for resize check: {}", e))?;
+    let img = match image::load_from_memory(&bytes) {
+        Ok(img) => img,
+        // If decode fails, return the original bytes — let the caller
+        // surface a normal save error instead of swallowing the image.
+        Err(_) => return Ok((base64_data.to_string(), None)),
+    };
+
+    let (w, h) = (img.width(), img.height());
+    if w <= MAX_IMAGE_DIM && h <= MAX_IMAGE_DIM {
+        return Ok((base64_data.to_string(), None));
+    }
+
+    let resized = if w >= h {
+        img.resize(
+            MAX_IMAGE_DIM,
+            u32::MAX,
+            image::imageops::FilterType::Triangle,
+        )
+    } else {
+        img.resize(
+            u32::MAX,
+            MAX_IMAGE_DIM,
+            image::imageops::FilterType::Triangle,
+        )
+    };
+
+    let (rw, rh) = (resized.width(), resized.height());
+    let mut buf = std::io::Cursor::new(Vec::new());
+    let encoded = if format == "jpeg" {
+        let encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut buf, 85);
+        resized.write_with_encoder(encoder)
+    } else {
+        resized.write_to(&mut buf, image::ImageFormat::Png)
+    };
+    encoded.map_err(|e| format!("Failed to re-encode resized screenshot: {}", e))?;
+
+    let new_b64 = base64::Engine::encode(
+        &base64::engine::general_purpose::STANDARD,
+        buf.into_inner(),
+    );
+    Ok((
+        new_b64,
+        Some(ResizeRecord {
+            original_width: w,
+            original_height: h,
+            width: rw,
+            height: rh,
+        }),
+    ))
+}
+
+fn scale_annotations(annotations: &mut [ScreenshotAnnotation], sx: f64, sy: f64) {
+    for a in annotations {
+        a.box_.x = ((a.box_.x as f64) * sx).round() as i64;
+        a.box_.y = ((a.box_.y as f64) * sy).round() as i64;
+        a.box_.width = ((a.box_.width as f64) * sx).round() as i64;
+        a.box_.height = ((a.box_.height as f64) * sy).round() as i64;
+    }
 }
 
 async fn capture_screenshot_base64(
@@ -667,6 +770,72 @@ mod tests {
         let projected = project_annotations(&annotations, Some(&target), None);
         assert_eq!(projected[0].box_.x, 15);
         assert_eq!(projected[0].box_.y, 20);
+    }
+
+    fn make_test_png(width: u32, height: u32) -> String {
+        let img = image::RgbaImage::from_pixel(width, height, image::Rgba([200, 50, 50, 255]));
+        let mut buf = std::io::Cursor::new(Vec::new());
+        image::DynamicImage::ImageRgba8(img)
+            .write_to(&mut buf, image::ImageFormat::Png)
+            .unwrap();
+        base64::Engine::encode(&base64::engine::general_purpose::STANDARD, buf.into_inner())
+    }
+
+    #[test]
+    fn downscale_skips_under_cap() {
+        let b64 = make_test_png(1024, 768);
+        let (out, record) = downscale_if_oversize(&b64, "png").unwrap();
+        assert!(record.is_none());
+        assert_eq!(out, b64);
+    }
+
+    #[test]
+    fn downscale_caps_tall_image() {
+        // 1200x12000 — taller than cap. Width should scale down
+        // proportionally so neither side exceeds MAX_IMAGE_DIM.
+        let b64 = make_test_png(1200, 12000);
+        let (out, record) = downscale_if_oversize(&b64, "png").unwrap();
+        let record = record.expect("expected resize record for oversize image");
+        assert_eq!(record.original_width, 1200);
+        assert_eq!(record.original_height, 12000);
+        assert!(record.height <= MAX_IMAGE_DIM);
+        assert!(record.width <= MAX_IMAGE_DIM);
+        // Decoded output matches the recorded dims.
+        let bytes =
+            base64::Engine::decode(&base64::engine::general_purpose::STANDARD, &out).unwrap();
+        let img = image::load_from_memory(&bytes).unwrap();
+        assert_eq!(img.width(), record.width);
+        assert_eq!(img.height(), record.height);
+    }
+
+    #[test]
+    fn downscale_caps_wide_image() {
+        let b64 = make_test_png(12000, 800);
+        let (_, record) = downscale_if_oversize(&b64, "png").unwrap();
+        let record = record.expect("expected resize record for oversize image");
+        assert!(record.width <= MAX_IMAGE_DIM);
+        assert!(record.height <= MAX_IMAGE_DIM);
+    }
+
+    #[test]
+    fn scale_annotations_applies_factor() {
+        let mut anns = vec![ScreenshotAnnotation {
+            ref_id: "e1".to_string(),
+            number: 1,
+            role: "button".to_string(),
+            name: None,
+            box_: AnnotationBox {
+                x: 100,
+                y: 2000,
+                width: 50,
+                height: 30,
+            },
+        }];
+        scale_annotations(&mut anns, 0.5, 0.5);
+        assert_eq!(anns[0].box_.x, 50);
+        assert_eq!(anns[0].box_.y, 1000);
+        assert_eq!(anns[0].box_.width, 25);
+        assert_eq!(anns[0].box_.height, 15);
     }
 
     #[test]

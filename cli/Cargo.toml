@@ -1,6 +1,6 @@
 [package]
 name = "agent-browser-native-tls"
-version = "0.26.0"
+version = "0.27.0"
 edition = "2021"
 description = "Fork of agent-browser with rustls-tls-native-roots — works behind TLS-inspecting egress proxies (Anthropic Managed Agents, Cloudflare WARP, corporate MITM). Drop-in replacement; binary still named `agent-browser`."
 license = "Apache-2.0"

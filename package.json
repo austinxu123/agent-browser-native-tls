@@ -1,6 +1,6 @@
 {
   "name": "agent-browser-native-tls",
-  "version": "0.26.5",
+  "version": "0.27.0",
   "description": "Fork of agent-browser with native TLS roots — works behind TLS-inspecting proxies",
   "type": "module",
   "files": [
