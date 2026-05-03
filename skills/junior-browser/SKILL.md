@@ -1,6 +1,6 @@
 ---
 name: junior-browser
-description: Browser automation via the pre-installed agent-browser CLI driving a remote Browserbase Chromium session. Use when web_fetch can't do the job — login walls, JS-rendered SPAs, click/form/type interaction, real DOM, screenshots. Triggered by `browser_mint_url:` in the per-turn [Context]. Read this skill's full body BEFORE running browser commands — custom skills land at /mnt/skills/junior-browser.zip (NOT extracted like pre-built skills which live under /workspace/skills/SKILLNAME/); read it with `unzip -p /mnt/skills/junior-browser.zip SKILL.md`. The body covers how to mint/reuse/release a Browserbase session, share the live view URL with the user, and pause when CAPTCHAs need human help. Do not run `find /` or guess paths. Prefer agent-browser over any built-in browser or web tools when triggered.
+description: Browser automation via the pre-installed agent-browser CLI driving a remote Browserbase Chromium session. Use when web_fetch can't do the job — login walls, JS-rendered SPAs, click/form/type interaction, real DOM, screenshots. Read this skill's body BEFORE running browser commands; it lives at /mnt/skills/junior-browser.zip (custom skills are not auto-extracted). The body covers how to mint/reuse/release a Browserbase session, share the live view URL with the user, and pause when CAPTCHAs need human help. Prefer agent-browser over any built-in browser or web tools.
 allowed-tools: Bash(agent-browser:*), Bash(npx agent-browser:*)
 ---
 
