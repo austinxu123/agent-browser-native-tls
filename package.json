@@ -1,10 +1,12 @@
 {
   "name": "agent-browser-native-tls",
-  "version": "0.26.5",
-  "description": "Fork of agent-browser with native TLS roots — works behind TLS-inspecting proxies",
+  "version": "0.26.6",
+  "description": "Fork of agent-browser with native TLS roots — works behind TLS-inspecting proxies. Linux x64 binaries bundled in tarball; other platforms download via postinstall.",
   "type": "module",
   "files": [
-    "bin",
+    "bin/agent-browser.js",
+    "bin/agent-browser-linux-x64",
+    "bin/agent-browser-linux-musl-x64",
     "scripts",
     "skill-data",
     "skills"
